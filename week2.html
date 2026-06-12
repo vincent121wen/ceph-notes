@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第二週：儲存與一致性 | Ceph 學習紀錄</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="../index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="week1.html">第一週：核心架構</a></li>
+      <li><a href="week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="week3.html">第三週：效能與優化</a></li>
+      <li><a href="week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="../cheatsheet.html">指令速查表</a></li>
+      <li><a href="../lab-log.html">實驗紀錄</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>第二週：儲存引擎與資料一致性</h1>
+  <p class="lead">本週目標：理解 Bluestore 的內部結構、一次寫入請求在 Ceph 內部的完整流程，以及 PG 在故障時如何重新達成一致（peering / recovery / backfill）。</p>
+
+  <h2>1. Bluestore：Ceph 的儲存引擎</h2>
+  <p>早期 Ceph 使用 Filestore（建立在一般檔案系統如 XFS 之上），後來改為 Bluestore，讓 OSD 直接管理裸磁碟（block device），省去檔案系統層的開銷，效能與資料完整性都更好。Bluestore 主要由三個區塊組成：</p>
+
+  <table>
+    <tr><th>區塊</th><th>用途</th><th>建議裝置</th></tr>
+    <tr><td>Data</td><td>儲存實際物件資料</td><td>HDD 或 SSD（容量主力）</td></tr>
+    <tr><td>DB (RocksDB)</td><td>儲存 metadata：物件位置、屬性、omap 等</td><td>NVMe/SSD（小但需要低延遲）</td></tr>
+    <tr><td>WAL<br><span class="badge">Write-Ahead Log</span></td><td>寫入先落地的日誌，確保斷電後資料一致</td><td>最快的裝置（通常與 DB 共用同一顆 SSD）</td></tr>
+  </table>
+
+  <p>如果 DB/WAL 與 Data 放在同一顆裝置上，稱為「混合部署」；若把 DB/WAL 放在獨立的高速 SSD/NVMe，稱為「分離部署」，可以顯著提升 metadata 密集操作（如小檔案寫入、目錄列舉）的效能。對於你目前的硬體（SAS HDD 為主的 pve-072 等），如果有 SSD 可以考慮把 DB/WAL 分離出來，但這屬於較大的架構調整，第三週會再評估是否值得做。</p>
+
+  <h2>2. 一次寫入請求的完整流程</h2>
+  <p>理解這個流程，對於排查效能問題與理解一致性保證非常重要。以一個 replica size = 3 的 pool 為例：</p>
+
+  <ol>
+    <li><strong>Client 計算位置</strong>：Client（例如 Proxmox 上的 librbd）根據物件名稱 hash 出 PG，再透過 CRUSH 計算出這個 PG 對應的 OSD 清單，其中第一個是 <strong>primary OSD</strong>。</li>
+    <li><strong>寫入 primary OSD</strong>：Client 直接把寫入請求送給 primary OSD（不經過 MON，MON 只負責維護地圖，不參與資料路徑）。</li>
+    <li><strong>Primary 轉發給 replica</strong>：Primary OSD 收到寫入後，會把資料同步轉發給其他 replica OSD。</li>
+    <li><strong>等待 ack</strong>：所有 replica 都把資料寫入自己的 Bluestore（包含 WAL）後回覆 ack，primary 收到所有 ack 後，才回覆 client「寫入成功」。</li>
+  </ol>
+
+  <p>這個機制保證了：<strong>只要 client 收到寫入成功的回應，資料就已經在所有副本上落地</strong>。這也是為什麼 Ceph 在正常情況下可以容忍單一節點故障而不丟資料——但也意味著如果某個副本的寫入延遲較高，會拖慢整個寫入的回應時間。</p>
+
+  <h2>3. Peering：PG 如何重新「對齊」</h2>
+  <p>當叢集狀態發生變化時（例如 OSD 重啟、加入、移除），對應到這些 OSD 的 PG 需要重新確認「目前最新的資料版本是什麼、各副本是否一致」，這個過程稱為 <strong>peering</strong>。</p>
+
+  <p>Peering 的大致過程：</p>
+  <ul>
+    <li>PG 的所有副本（包含 primary）互相交換各自記錄的最新操作日誌（pg log）</li>
+    <li>選出真正的 primary，並確定哪個副本擁有最新、最完整的資料</li>
+    <li>找出各副本之間缺失或落後的部分</li>
+    <li>peering 完成後，PG 進入 active 狀態，可以開始處理讀寫請求；缺失的資料則透過 recovery 補齊</li>
+  </ul>
+
+  <p>Peering 通常很快（數秒內），但如果叢集規模大、PG 數量多，或者同時有大量 OSD 狀態變化（例如整個 host 重啟），peering 的總時間會拉長，期間相關 PG 會短暫無法服務（peering 狀態時 IO 會被阻塞）。</p>
+
+  <h2>4. Recovery 與 Backfill 的差異</h2>
+  <p>這兩者都是「把缺失的資料補齊」，但適用情境不同：</p>
+
+  <table>
+    <tr><th>機制</th><th>適用情境</th><th>特點</th></tr>
+    <tr><td>Recovery</td><td>OSD 短暫離線後重新上線（例如重啟），pg log 還在，差異不大</td><td>只需要補齊「遺漏的那幾筆操作」，速度快、資源消耗較低</td></tr>
+    <tr><td>Backfill</td><td>OSD 離線太久導致 pg log 不夠用，或是新加入 OSD、CRUSH 變更導致 PG 需要搬到新位置</td><td>需要把整個 PG 的資料完整複製過去，類似全量同步，資源消耗較大，可能明顯影響叢集效能</td></tr>
+  </table>
+
+  <p>實務上，當你看到 <code>ceph -s</code> 顯示 <code>backfilling</code> 時，通常意味著有大量資料正在搬移（例如 OSD 被移除、新增節點、或 CRUSH map 變更），這時候叢集整體效能會受到影響，Ceph 提供了一些參數（如 <code>osd_max_backfills</code>、<code>osd_recovery_max_active</code>）可以控制 recovery/backfill 的速度與對正常 IO 的影響，第三週會再提到。</p>
+
+  <h2>5. 實作：在 pve-5 測試環境模擬 OSD 故障</h2>
+  <p>本週的實作建議在 pve-5 的測試 Ceph 叢集上進行（避免影響正式環境）。建議步驟：</p>
+
+  <ol>
+    <li>先用 <code>ceph -s</code> 確認測試叢集是 <code>HEALTH_OK</code></li>
+    <li>選定一個 OSD，先用 <code>ceph osd out &lt;id&gt;</code> 把它標記為 out，觀察 <code>ceph -s</code> 與 <code>ceph -w</code> 的即時輸出，記錄狀態變化（rebalance / backfilling 等）</li>
+    <li>等待 rebalance 完成後，用 <code>ceph osd in &lt;id&gt;</code> 讓它重新加入，再觀察一次狀態變化</li>
+    <li>另外可以嘗試直接停止某個 OSD daemon（<code>systemctl stop ceph-osd@&lt;id&gt;</code>），觀察短時間內叢集如何反應（peering -&gt; degraded -&gt; recovery）</li>
+  </ol>
+
+  <p>把每一步的 <code>ceph -s</code> 輸出與觀察到的狀態變化記錄到<a href="../lab-log.html">實驗紀錄</a>頁面，特別留意狀態從 <code>active+clean</code> 變成 <code>active+degraded</code>、<code>peering</code>、<code>backfilling</code>，最後回到 <code>active+clean</code> 的完整過程。</p>
+
+  <h2>6. 本週產出：PG 狀態碼對照表</h2>
+  <p>建議把這週觀察到的狀態碼整理到<a href="../cheatsheet.html">指令速查表</a>，例如：</p>
+  <ul>
+    <li><code>active+clean</code> — 正常，所有副本一致</li>
+    <li><code>active+degraded</code> — 至少有一個副本缺失，但 PG 仍可服務讀寫</li>
+    <li><code>peering</code> — 正在重新確認副本之間的一致性，短暫無法服務</li>
+    <li><code>recovering</code> — 正在補齊少量缺失資料</li>
+    <li><code>backfilling</code> — 正在大量搬移資料以達到新的分布</li>
+    <li><code>undersized</code> — 副本數不足（例如 CRUSH 找不到足夠的位置）</li>
+  </ul>
+
+  <p style="margin-top:2rem; font-size:13px; color:var(--text-secondary);">下一週：效能基準測試、PG 數量檢視、CRUSH map 與輕量優化評估。</p>
+</main>
+
+<script src="../script.js"></script>
+</body>
+</html>

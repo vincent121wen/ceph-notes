@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>指令速查表 | Ceph 學習紀錄</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="notes/week1.html">第一週：核心架構</a></li>
+      <li><a href="notes/week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="notes/week3.html">第三週：效能與優化</a></li>
+      <li><a href="notes/week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="cheatsheet.html">指令速查表</a></li>
+      <li><a href="lab-log.html">實驗紀錄</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>Ceph 維運速查表</h1>
+  <p class="lead">這個頁面是邊學邊整理的速查表，建議每週結束後回來補充對應的章節。以下先放好框架與第一週的內容，其餘章節隨進度填寫。</p>
+
+  <h2>日常健康檢查指令</h2>
+  <table>
+    <tr><th>頻率</th><th>指令</th><th>檢查重點</th></tr>
+    <tr><td>每日</td><td><code>ceph -s</code></td><td>整體 health 是否為 HEALTH_OK，是否有 OSD down</td></tr>
+    <tr><td>每週</td><td><code>ceph osd df</code></td><td>各 OSD 容量使用率是否均衡，是否接近 nearfull</td></tr>
+    <tr><td>每週</td><td><code>ceph osd tree</code></td><td>OSD/host 拓撲是否與預期一致，是否有非預期的 down/out</td></tr>
+    <tr><td>異常時</td><td><code>ceph health detail</code></td><td>查看 HEALTH_WARN/ERR 的具體原因</td></tr>
+    <tr><td>異常時</td><td><code>ceph pg dump</code></td><td>列出所有 PG 狀態，找出非 active+clean 的 PG</td></tr>
+  </table>
+
+  <h2>PG 狀態碼對照表</h2>
+  <table>
+    <tr><th>狀態</th><th>意義</th></tr>
+    <tr><td><code>active+clean</code></td><td>正常，所有副本一致</td></tr>
+    <tr><td><code>active+degraded</code></td><td>至少一個副本缺失，但仍可服務讀寫</td></tr>
+    <tr><td><code>peering</code></td><td>正在重新確認副本一致性，短暫無法服務</td></tr>
+    <tr><td><code>recovering</code></td><td>正在補齊少量缺失資料（pg log 仍有效）</td></tr>
+    <tr><td><code>backfilling</code></td><td>正在大量搬移資料，影響較大</td></tr>
+    <tr><td><code>undersized</code></td><td>副本數不足，CRUSH 找不到足夠位置</td></tr>
+    <tr><td><code>incomplete</code></td><td>缺乏足夠資訊完成 peering，需人工介入（嚴重）</td></tr>
+  </table>
+
+  <h2>容量與 PG 數量</h2>
+  <pre><code># 查看 autoscaler 建議
+ceph osd pool autoscale-status
+
+# 查看/調整 pool 的 pg_num、pgp_num
+ceph osd pool get &lt;pool&gt; pg_num
+ceph osd pool set &lt;pool&gt; pg_num &lt;n&gt;
+ceph osd pool set &lt;pool&gt; pgp_num &lt;n&gt;</code></pre>
+
+  <h2>效能測試</h2>
+  <pre><code># RADOS 層級基準測試
+rados bench -p &lt;pool&gt; 60 write --no-cleanup
+rados bench -p &lt;pool&gt; 60 seq
+rados -p &lt;pool&gt; cleanup
+
+# RBD 層級基準測試
+rbd bench --io-type write --io-size 4K --io-threads 16 --io-total 1G &lt;pool&gt;/&lt;image&gt;</code></pre>
+
+  <h2>CRUSH map</h2>
+  <pre><code># 匯出並轉成文字格式
+ceph osd getcrushmap -o crushmap.bin
+crushtool -d crushmap.bin -o crushmap.txt</code></pre>
+
+  <h2>監控告警對照表</h2>
+  <table>
+    <tr><th>項目</th><th>建議等級</th><th>備註</th></tr>
+    <tr><td>整體 health = HEALTH_ERR</td><td>緊急</td><td>立即通知</td></tr>
+    <tr><td>任一 OSD down/out</td><td>緊急</td><td></td></tr>
+    <tr><td>OSD 使用率 &gt; nearfull（約85%）</td><td>警告</td><td></td></tr>
+    <tr><td>OSD 使用率 &gt; full（約95%）</td><td>緊急</td><td>叢集會拒絕寫入</td></tr>
+    <tr><td>MON quorum 異常</td><td>緊急</td><td></td></tr>
+    <tr><td>長時間 backfilling/recovering</td><td>警告</td><td>觀察是否影響效能</td></tr>
+  </table>
+
+  <h2>緊急排查步驟（草稿）</h2>
+  <ol>
+    <li><code>ceph -s</code> 確認整體狀態與警告類型</li>
+    <li><code>ceph health detail</code> 查看具體訊息</li>
+    <li>依訊息內容判斷是 OSD 問題、PG 問題還是 MON 問題，分別用 <code>ceph osd tree</code> / <code>ceph pg dump</code> / <code>ceph mon stat</code> 深入</li>
+    <li>記錄處理過程到<a href="lab-log.html">實驗紀錄</a></li>
+  </ol>
+
+  <p style="margin-top:2rem; font-size:13px; color:var(--text-secondary);">提示：每完成一週的筆記，回來這頁補上對應的指令與心得，會比一次性整理更扎實。</p>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

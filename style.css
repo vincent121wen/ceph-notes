@@ -1,0 +1,233 @@
+:root {
+  --bg: #ffffff;
+  --bg-secondary: #f5f5f3;
+  --text: #1a1a1a;
+  --text-secondary: #6b6b66;
+  --border: rgba(0,0,0,0.12);
+  --accent: #185fa5;
+  --accent-bg: #e6f1fb;
+  --radius: 8px;
+  --sidebar-width: 220px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 1rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar h1 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 1.5rem;
+}
+
+.sidebar nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar nav .group-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 600;
+}
+
+.sidebar nav .group-title:first-child {
+  margin-top: 0;
+}
+
+.sidebar nav a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.sidebar nav a:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.sidebar nav a.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Main content */
+main {
+  flex: 1;
+  padding: 2rem 2.5rem;
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+main h1 {
+  font-size: 26px;
+  margin: 0 0 0.5rem;
+}
+
+main h2 {
+  font-size: 20px;
+  margin: 2rem 0 0.75rem;
+}
+
+main h3 {
+  font-size: 16px;
+  margin: 1.5rem 0 0.5rem;
+}
+
+main p, main li {
+  line-height: 1.7;
+  font-size: 15px;
+}
+
+main .lead {
+  color: var(--text-secondary);
+  font-size: 15px;
+  margin-bottom: 1.5rem;
+}
+
+code, pre {
+  font-family: "SF Mono", Consolas, monospace;
+  font-size: 13px;
+}
+
+pre {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+
+code {
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 1rem 0;
+}
+
+th, td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* Checklist */
+.week-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.week-block h3 {
+  margin: 0 0 0.5rem;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.week-block label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.week-block input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.week-block label.done span {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+/* Progress summary */
+.progress-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.metric-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.metric-card .label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 4px;
+}
+
+.metric-card .value {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  body { flex-direction: column; }
+  .sidebar { width: 100%; height: auto; position: relative; }
+  main { padding: 1.5rem; }
+}

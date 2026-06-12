@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>實驗紀錄 | Ceph 學習紀錄</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="notes/week1.html">第一週：核心架構</a></li>
+      <li><a href="notes/week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="notes/week3.html">第三週：效能與優化</a></li>
+      <li><a href="notes/week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="cheatsheet.html">指令速查表</a></li>
+      <li><a href="lab-log.html">實驗紀錄</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>實驗紀錄</h1>
+  <p class="lead">記錄每次在 pve-5 測試環境或 pve-071~075 正式環境上的操作過程、輸出與觀察。建議每筆紀錄包含：日期、環境、操作內容、輸出摘要、觀察與心得。</p>
+
+  <h2>範例格式</h2>
+  <pre><code>## 2026-06-15 | pve-5 測試環境
+
+操作：將 osd.3 標記為 out，觀察 rebalance
+
+指令：
+ceph osd out 3
+ceph -s
+
+觀察：
+- health 從 HEALTH_OK 變為 HEALTH_WARN
+- 約 12 個 PG 進入 backfilling
+- 整個 rebalance 過程約耗時 4 分鐘
+
+心得：
+- backfilling 期間 rados bench 的延遲明顯上升（約 2x）
+- 確認 osd_max_backfills 預設值為 1，符合預期的保守行為</code></pre>
+
+  <h2>第一週紀錄</h2>
+  <p style="color:var(--text-secondary);">（在這裡貼上 ceph -s / ceph osd df / ceph osd tree / ceph osd pool ls detail 的輸出與觀察）</p>
+
+  <h2>第二週紀錄</h2>
+  <p style="color:var(--text-secondary);">（在這裡記錄 pve-5 上 OSD 故障模擬的過程與狀態變化）</p>
+
+  <h2>第三週紀錄</h2>
+  <p style="color:var(--text-secondary);">（在這裡記錄效能測試結果、PG 數調整觀察、優化候選清單）</p>
+
+  <h2>第四週紀錄</h2>
+  <p style="color:var(--text-secondary);">（在這裡記錄 Zabbix 告警設定過程與執行的優化項目）</p>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

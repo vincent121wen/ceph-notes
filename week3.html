@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第三週：效能與優化 | Ceph 學習紀錄</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="../index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="week1.html">第一週：核心架構</a></li>
+      <li><a href="week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="week3.html">第三週：效能與優化</a></li>
+      <li><a href="week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="../cheatsheet.html">指令速查表</a></li>
+      <li><a href="../lab-log.html">實驗紀錄</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>第三週：效能觀察與輕量優化</h1>
+  <p class="lead">本週目標：建立目前叢集的效能基準，檢視 PG 數量與 CRUSH 設定是否合理，並找出 1-2 個可在正式環境執行的低風險優化項目（先記錄、不執行）。</p>
+
+  <h2>1. 效能基準測試工具</h2>
+
+  <h3>1.1 rados bench</h3>
+  <p><code>rados bench</code> 是 Ceph 內建的基準測試工具，直接對某個 pool 做寫入/讀取測試，繞過 RBD 層，可以看出儲存層本身的效能上限。</p>
+  <pre><code># 對 testpool 做 60 秒的寫入測試，每個物件 4MB（預設）
+rados bench -p testpool 60 write --no-cleanup
+
+# 接續做順序讀測試
+rados bench -p testpool 60 seq
+
+# 隨機讀測試
+rados bench -p testpool 60 rand
+
+# 測試完成後清除殘留物件
+rados -p testpool cleanup</code></pre>
+
+  <p>輸出中重點看：</p>
+  <ul>
+    <li><strong>Bandwidth (MB/sec)</strong>：整體吞吐量</li>
+    <li><strong>Avg Latency</strong>：平均延遲，對於 SAS HDD 叢集，寫入延遲通常會比 SSD/NVMe 高很多</li>
+    <li><strong>Stddev Latency</strong>：延遲的標準差，如果偏差很大，可能代表某些 OSD 效能不一致（例如混用不同型號的硬碟）</li>
+  </ul>
+
+  <h3>1.2 rbd bench</h3>
+  <p>如果想測試更貼近 Proxmox VM 實際使用情境（透過 RBD），可以用 <code>rbd bench</code>：</p>
+  <pre><code># 先建立一個測試用的 RBD image
+rbd create testpool/bench-image --size 10G
+
+# 對這個 image 做隨機寫入測試
+rbd bench --io-type write --io-size 4K --io-threads 16 --io-total 1G testpool/bench-image
+
+# 完成後刪除
+rbd rm testpool/bench-image</code></pre>
+
+  <p><strong>注意</strong>：這些測試會佔用叢集的 IO 資源，建議在低峰時段執行，且優先在 pve-5 測試叢集驗證流程，正式環境上執行時控制好測試的規模與時間。</p>
+
+  <h2>2. 檢視 PG 數量是否合理</h2>
+
+  <h3>2.1 確認 pg_autoscaler 狀態</h3>
+  <p>現代 Ceph 版本（Nautilus 以後）預設啟用 <code>pg_autoscaler</code>，它會根據每個 pool 的資料量自動建議或調整 pg_num。先確認目前的設定：</p>
+  <pre><code># 查看 autoscaler 的建議與目前狀態
+ceph osd pool autoscale-status</code></pre>
+
+  <p>輸出會列出每個 pool 的：</p>
+  <ul>
+    <li><code>SIZE</code>：目前資料量</li>
+    <li><code>PG_NUM</code>：目前的 PG 數</li>
+    <li><code>NEW PG_NUM</code>：autoscaler 建議的 PG 數（如果與目前不同，代表它認為應該調整）</li>
+    <li><code>AUTOSCALE</code>：模式為 <code>on</code>（自動調整）、<code>warn</code>（只提示不自動調整）或 <code>off</code></li>
+  </ul>
+
+  <h3>2.2 手動估算的經驗公式</h3>
+  <p>即使有 autoscaler，理解手動估算的邏輯仍然有幫助。傳統的經驗公式是：</p>
+  <pre><code>Total PGs = (OSD 數量 x 每個 OSD 目標 PG 數) / replica size
+
+# 範例：假設叢集有 30 個 OSD，目標每個 OSD 約 100 個 PG，replica size = 3
+Total PGs = (30 x 100) / 3 = 1000</code></pre>
+
+  <p>算出的 Total PGs 通常會再「調整為最接近的 2 的次方」（例如 1024），因為 2 的次方在 PG 分裂/合併時計算上更有效率（不過近年版本對非 2 次方的支援已經改善很多）。</p>
+
+  <p>如果一個 pool 算出來的建議值與目前設定差距很大（例如目前是 32，但公式建議 256），可能代表這個 pool 的 PG 數偏少，OSD 之間負載分布可能不均；反之如果目前數字遠高於建議值，則可能造成過多的 peering 開銷。</p>
+
+  <h2>3. 檢視 CRUSH map 與 failure domain</h2>
+
+  <h3>3.1 匯出並閱讀 CRUSH map</h3>
+  <pre><code># 匯出目前的 CRUSH map 為可讀文字格式
+ceph osd getcrushmap -o crushmap.bin
+crushtool -d crushmap.bin -o crushmap.txt
+cat crushmap.txt</code></pre>
+
+  <p>重點檢查 <code>rule</code> 區塊中的 <code>step chooseleaf firstn 0 type host</code> 這一行（或類似內容）：<code>type host</code> 表示 failure domain 是 host 層級，符合「副本不會放在同一台主機」的目標。如果寫的是 <code>type osd</code>，代表只保證不會放在同一個 OSD 上，但仍可能放在同一台主機的不同 OSD——對於單機多 OSD 的環境，這樣的保護力較弱。</p>
+
+  <h3>3.2 對照 pve-071~075 的機架/節點分布</h3>
+  <p>結合第一週 <code>ceph osd tree</code> 的輸出，確認：</p>
+  <ul>
+    <li>每個 host 下的 OSD 數量是否大致平衡（避免某台機器扛了過多 PG）</li>
+    <li>如果未來有跨機架部署的計畫，CRUSH map 是否已經有 rack 這一層的 bucket，或目前都還在 root 下直接接 host</li>
+  </ul>
+
+  <h2>4. 測試環境：嘗試調整 PG 數並觀察 rebalance</h2>
+  <p>在 pve-5 測試叢集上（不影響正式環境），可以實際體驗 PG 數調整的過程：</p>
+  <pre><code># 查看目前 pg_num
+ceph osd pool get testpool pg_num
+
+# 調整 pg_num（例如從 32 調到 64）
+ceph osd pool set testpool pg_num 64
+
+# 通常也需要同步調整 pgp_num，才會真正觸發資料搬移
+ceph osd pool set testpool pgp_num 64
+
+# 觀察過程
+ceph -s
+ceph -w</code></pre>
+
+  <p>觀察重點：調整後 <code>ceph -s</code> 會出現多少 PG 進入 <code>backfilling</code>、整個過程花了多久、以及（如果同時跑著 rados bench）效能受到多大影響。把觀察結果記錄到<a href="../lab-log.html">實驗紀錄</a>。</p>
+
+  <h2>5. 本週產出：低風險優化候選清單</h2>
+  <p>根據前面的觀察，列出 1-2 個你認為值得在正式環境（pve-071~075）執行的優化項目，但<strong>本週只記錄、不執行</strong>，留到第四週評估後再決定是否執行。可能的方向包括：</p>
+  <ul>
+    <li>某個 pool 的 PG 數明顯偏離 autoscaler 建議值，考慮是否要啟用 autoscaler 或手動調整</li>
+    <li>某些 OSD 的使用率明顯偏高（第一週記錄的 <code>ceph osd df</code>），考慮是否需要 reweight</li>
+    <li>確認 <code>osd_max_backfills</code> 等參數的目前值，評估是否需要在維護窗口期間調整以加速未來的 recovery</li>
+  </ul>
+
+  <p style="margin-top:2rem; font-size:13px; color:var(--text-secondary);">下一週：監控告警覆蓋度檢查、執行一項優化、彙整四週筆記成維運速查表。</p>
+</main>
+
+<script src="../script.js"></script>
+</body>
+</html>

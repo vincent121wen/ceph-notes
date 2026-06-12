@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第四週：監控與彙整 | Ceph 學習紀錄</title>
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="../index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="week1.html">第一週：核心架構</a></li>
+      <li><a href="week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="week3.html">第三週：效能與優化</a></li>
+      <li><a href="week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="../cheatsheet.html">指令速查表</a></li>
+      <li><a href="../lab-log.html">實驗紀錄</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>第四週：整合監控與彙整筆記</h1>
+  <p class="lead">本週目標：確認 Zabbix 對 Ceph 的監控覆蓋度、視情況執行一項低風險優化、並把四週的筆記彙整成一份可長期使用的維運速查表。</p>
+
+  <h2>1. Ceph 的健康狀態分級</h2>
+  <p>在設計監控告警之前，先理解 Ceph 自身的健康狀態分級：</p>
+  <table>
+    <tr><th>等級</th><th>意義</th><th>範例</th></tr>
+    <tr><td><code>HEALTH_OK</code></td><td>一切正常</td><td>所有 PG 為 active+clean，所有 OSD up</td></tr>
+    <tr><td><code>HEALTH_WARN</code></td><td>需要關注但通常不立即影響服務</td><td>OSD near full、PG 數與 autoscaler 建議不符、clock skew</td></tr>
+    <tr><td><code>HEALTH_ERR</code></td><td>嚴重問題，可能已影響資料可用性</td><td>PG 為 incomplete/down、OSD full（唯讀模式）</td></tr>
+  </table>
+
+  <p>監控設計的基本原則：<code>HEALTH_ERR</code> 必須是緊急告警（例如即時通知），<code>HEALTH_WARN</code> 視內容決定是否需要立即處理，正常的 <code>HEALTH_OK</code> 不需要告警但建議定期巡檢。</p>
+
+  <h2>2. Zabbix 監控 Ceph 的常見方式</h2>
+  <p>結合你現有的 Zabbix 7.0.24 環境（透過 zbx-pxy-fl2-mes proxy），常見的整合方式有幾種：</p>
+
+  <h3>2.1 透過 Ceph MGR 的 Zabbix 模組</h3>
+  <p>Ceph MGR 內建 <code>zabbix</code> 模組，可以直接把叢集狀態（health、容量、OSD 狀態等）以 Zabbix sender 協定推送到 Zabbix server/proxy：</p>
+  <pre><code># 啟用 zabbix 模組
+ceph mgr module enable zabbix
+
+# 設定 Zabbix server/proxy 位址與 port
+ceph zabbix config-set zabbix_host &lt;zabbix-proxy-ip&gt;
+ceph zabbix config-set zabbix_port 10051
+
+# 設定發送頻率（秒）
+ceph zabbix config-set interval 60
+
+# 手動觸發一次發送，測試連線
+ceph zabbix send</code></pre>
+  <p>使用這種方式時，Zabbix 端需要設定對應的 host 與 item（type 為 Zabbix trapper），item key 需與 MGR 模組送出的 key 對應。</p>
+
+  <h3>2.2 透過 Ceph 的 Prometheus exporter</h3>
+  <p>另一種方式是啟用 MGR 的 <code>prometheus</code> 模組，讓 Ceph 暴露 <code>/metrics</code> endpoint，再透過 Zabbix 的 HTTP agent item 或既有的 Prometheus -&gt; Zabbix 橋接方式取得資料：</p>
+  <pre><code># 啟用 prometheus 模組（預設監聽 9283）
+ceph mgr module enable prometheus</code></pre>
+  <p>這種方式的優點是指標更細緻（可以拿到每個 OSD、每個 pool 的詳細數據），缺點是需要額外設定 Zabbix 端的解析邏輯。</p>
+
+  <h3>2.3 建議的告警項目checklist</h3>
+  <p>不論用哪種方式，建議至少涵蓋以下告警項目：</p>
+  <ul>
+    <li>整體 health 狀態變為 <code>HEALTH_ERR</code>（緊急）</li>
+    <li>任一 OSD 狀態變為 down 或 out（緊急）</li>
+    <li>任一 OSD 容量使用率超過 <code>nearfull</code> 閾值（通常 85%，警告）</li>
+    <li>任一 OSD 容量使用率超過 <code>full</code> 閾值（通常 95%，緊急——此時叢集會拒絕寫入）</li>
+    <li>PG 數量處於非 active+clean 狀態的比例（用於觀察是否有長時間的 recovery/backfill）</li>
+    <li>MON quorum 數量是否正常（少於多數即為嚴重問題）</li>
+  </ul>
+
+  <h2>3. 本週實作：確認與補齊 Zabbix 告警</h2>
+  <ol>
+    <li>登入 Zabbix，檢查目前是否已有針對 pve-071~075 Ceph 的 host/template，列出目前已涵蓋的 item 與 trigger</li>
+    <li>對照上面的 checklist，找出缺漏的項目</li>
+    <li>如果完全沒有整合，優先考慮先用 <code>ceph mgr module enable zabbix</code> 的方式做基本的 health 狀態告警（設定成本較低），細緻指標可留待之後再用 Prometheus 方式補強</li>
+    <li>補齊後，可以用 <code>ceph osd set noout</code> + 手動停止一個測試 OSD（在 pve-5 上）的方式，驗證告警是否真的會觸發</li>
+  </ol>
+
+  <h2>4. 視情況執行一項優化</h2>
+  <p>回顧第三週記錄的低風險優化候選清單，評估是否要在本週執行其中一項。執行前建議確認：</p>
+  <ul>
+    <li>是否在低峰時段</li>
+    <li>是否已在 pve-5 測試環境驗證過相同操作的影響</li>
+    <li>是否已記錄「執行前」的 <code>ceph -s</code> / <code>ceph osd df</code> 基準，方便執行後比較</li>
+    <li>如果是調整 PG 數等會觸發 backfill 的操作，是否設定了合理的 <code>osd_max_backfills</code> 以控制對正常 IO 的影響</li>
+  </ul>
+  <p>執行過程與結果記錄到<a href="../lab-log.html">實驗紀錄</a>。</p>
+
+  <h2>5. 彙整：Ceph 維運速查表</h2>
+  <p>把四週累積的內容整理到<a href="../cheatsheet.html">指令速查表</a>頁面，建議的結構：</p>
+  <ul>
+    <li><strong>日常健康檢查指令</strong>：第一週整理的 ceph -s / osd df / osd tree 等</li>
+    <li><strong>PG 狀態碼對照表</strong>：第二週整理的 active+clean / degraded / peering / backfilling 等</li>
+    <li><strong>效能測試指令</strong>：第三週的 rados bench / rbd bench</li>
+    <li><strong>PG 數量估算與調整指令</strong>：第三週的 autoscale-status、pg_num 調整</li>
+    <li><strong>監控告警對照表</strong>：本週整理的 Zabbix 告警項目 checklist</li>
+    <li><strong>緊急排查步驟</strong>：當 health 變成 WARN/ERR 時，依序該檢查哪些東西</li>
+  </ul>
+
+  <h2>6. 回顧與下一步</h2>
+  <p>完成四週後，建議列出 3 個目前仍不清楚、或值得深入的問題，作為下一階段學習的起點。常見方向包括：</p>
+  <ul>
+    <li>Erasure coding（EC pool）的原理與適用場景，相對於目前的 replication 模式</li>
+    <li>RBD snapshot / clone / mirroring 的機制，與你正在進行的 TrueNAS ZFS replication 專案做對比</li>
+    <li>Ceph 版本升級（minor/major）的標準流程與注意事項</li>
+    <li>多站點（multi-site）部署或更細緻的 CRUSH 拓撲設計（rack 層級）</li>
+  </ul>
+
+  <p style="margin-top:2rem; font-size:13px; color:var(--text-secondary);">完成四週後，記得回到<a href="../index.html">首頁</a>檢視整體進度。</p>
+</main>
+
+<script src="../script.js"></script>
+</body>
+</html>

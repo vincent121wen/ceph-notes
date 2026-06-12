@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ceph 學習紀錄</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="notes/week1.html">第一週：核心架構</a></li>
+      <li><a href="notes/week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="notes/week3.html">第三週：效能與優化</a></li>
+      <li><a href="notes/week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="cheatsheet.html">指令速查表</a></li>
+      <li><a href="lab-log.html">實驗紀錄</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>Ceph 一個月學習計畫</h1>
+  <p class="lead">目標：以理解 Ceph 核心原理為主、輕量優化為輔，搭配既有 pve-071~075 叢集與 pve-5 測試環境驗證。</p>
+
+  <div class="progress-summary">
+    <div class="metric-card">
+      <p class="label">已完成</p>
+      <p class="value"><span id="progress-done">0</span></p>
+    </div>
+    <div class="metric-card">
+      <p class="label">總任務</p>
+      <p class="value"><span id="progress-total">0</span></p>
+    </div>
+    <div class="metric-card">
+      <p class="label">進度</p>
+      <p class="value"><span id="progress-pct">0%</span></p>
+    </div>
+  </div>
+
+  <div class="week-block">
+    <h3>第一週 · Ceph 核心架構與健康檢查</h3>
+    <label><input type="checkbox" data-key="w1-1"><span>讀懂 Ceph 架構：OSD / MON / MGR / MDS 角色與互動關係</span></label>
+    <label><input type="checkbox" data-key="w1-2"><span>理解 CRUSH 演算法：資料如何分布到 OSD，failure domain 概念</span></label>
+    <label><input type="checkbox" data-key="w1-3"><span>理解 PG/PGP 是什麼，為何影響效能與分布均勻度</span></label>
+    <label><input type="checkbox" data-key="w1-4"><span>對 pve-071..075 執行 ceph -s, ceph osd df, ceph osd tree，記錄目前狀態</span></label>
+    <label><input type="checkbox" data-key="w1-5"><span>整理一份「Ceph 健康檢查 SOP」：每日/每週該看哪些指標</span></label>
+  </div>
+
+  <div class="week-block">
+    <h3>第二週 · 儲存引擎與資料一致性</h3>
+    <label><input type="checkbox" data-key="w2-1"><span>理解 Bluestore 結構：WAL / DB / Data 三個區塊的角色</span></label>
+    <label><input type="checkbox" data-key="w2-2"><span>理解 Ceph 的寫入流程：client -&gt; primary OSD -&gt; replica OSD -&gt; ack</span></label>
+    <label><input type="checkbox" data-key="w2-3"><span>理解 Peering 與 Recovery/Backfill 的差異與觸發時機</span></label>
+    <label><input type="checkbox" data-key="w2-4"><span>在測試環境（pve-5）模擬一次 OSD 故障，觀察 recovery 過程與狀態變化</span></label>
+    <label><input type="checkbox" data-key="w2-5"><span>整理 Ceph 常見狀態碼對照表（active+clean, degraded, backfilling 等）</span></label>
+  </div>
+
+  <div class="week-block">
+    <h3>第三週 · 效能觀察與輕量優化</h3>
+    <label><input type="checkbox" data-key="w3-1"><span>用 ceph osd perf 與 rados bench 觀察目前叢集效能基準</span></label>
+    <label><input type="checkbox" data-key="w3-2"><span>檢查目前 PG 數量是否合理（用 pg_autoscaler 或手動計算對照）</span></label>
+    <label><input type="checkbox" data-key="w3-3"><span>檢視 CRUSH map，確認 failure domain 設定是否符合機架/節點分布</span></label>
+    <label><input type="checkbox" data-key="w3-4"><span>若有明顯落差，在測試環境試做 PG 數調整，觀察 rebalance 影響</span></label>
+    <label><input type="checkbox" data-key="w3-5"><span>記錄 1-2 個可在正式環境執行的低風險優化項目（先不執行）</span></label>
+  </div>
+
+  <div class="week-block">
+    <h3>第四週 · 整合監控與彙整筆記</h3>
+    <label><input type="checkbox" data-key="w4-1"><span>確認 Zabbix 對 Ceph 的監控覆蓋度（health, OSD down, capacity 等告警）</span></label>
+    <label><input type="checkbox" data-key="w4-2"><span>補齊缺漏的告警閾值設定（若有）</span></label>
+    <label><input type="checkbox" data-key="w4-3"><span>視情況執行第三週記錄的低風險優化項目之一</span></label>
+    <label><input type="checkbox" data-key="w4-4"><span>把四週筆記整理成「Ceph 維運速查表」（命令 + 狀態說明 + 排查步驟）</span></label>
+    <label><input type="checkbox" data-key="w4-5"><span>回顧整體學習：列出仍不清楚的 3 個問題，作為下階段方向</span></label>
+  </div>
+
+  <p class="lead" style="margin-top:2rem; font-size:13px;">勾選狀態會儲存在這個瀏覽器的 localStorage，更換裝置或清除瀏覽器資料會重置。</p>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
