@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>個人筆記 | Ceph 學習紀錄</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.journal-entry {
+  border-left: 3px solid var(--accent);
+  padding: 0 0 0 1.25rem;
+  margin-bottom: 2.5rem;
+}
+.journal-entry .date {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+.journal-entry h3 {
+  margin: 0 0 0.75rem;
+  font-size: 16px;
+}
+.journal-entry p {
+  margin: 0 0 0.75rem;
+}
+.journal-entry ul {
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+.journal-entry li {
+  margin-bottom: 4px;
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <h1>Ceph 學習紀錄</h1>
+  <nav>
+    <ul>
+      <li class="group-title">總覽</li>
+      <li><a href="index.html">首頁 / 進度</a></li>
+      <li class="group-title">每週筆記</li>
+      <li><a href="notes/week1.html">第一週：核心架構</a></li>
+      <li><a href="notes/week2.html">第二週：儲存與一致性</a></li>
+      <li><a href="notes/week3.html">第三週：效能與優化</a></li>
+      <li><a href="notes/week4.html">第四週：監控與彙整</a></li>
+      <li class="group-title">參考資料</li>
+      <li><a href="cheatsheet.html">指令速查表</a></li>
+      <li><a href="lab-log.html">實驗紀錄</a></li>
+      <li><a href="my-notes.html">個人筆記</a></li>
+    </ul>
+  </nav>
+</aside>
+
+<main>
+  <h1>個人筆記</h1>
+  <p class="lead">隨手記下學習過程中自己的想法、比喻、疑問與頓悟，不拘格式，按日期排列。</p>
+
+  <!-- ===== 2026-06-15 ===== -->
+  <div class="journal-entry">
+    <p class="date">2026-06-15</p>
+
+    <h3>用貨運比喻理解 PG、物件、OSD 的關係</h3>
+    <p>今天透過破壞性測試（停掉 osd.0）才真正搞懂 PG 和 object 的差別。
+    之前一直以為 PG 就是資料本身，其實 PG 只是「容器」，資料（object）才是真正放在裡面的東西。</p>
+
+    <p>我自己想到的比喻：</p>
+    <table>
+      <tr><th>Ceph 概念</th><th>貨運比喻</th></tr>
+      <tr><td>PG</td><td>貨櫃（容器，不是貨物本身）</td></tr>
+      <tr><td>物件（object）</td><td>貨櫃裡的貨物（實際資料）</td></tr>
+      <tr><td>副本（replica）</td><td>貨櫃複製幾份放在不同倉庫</td></tr>
+      <tr><td>OSD</td><td>倉庫</td></tr>
+      <tr><td>host</td><td>倉庫所在的建築物</td></tr>
+      <tr><td>CRUSH</td><td>貨運排程系統，決定貨櫃送到哪些倉庫</td></tr>
+    </table>
+
+    <h3>19.048% degraded 的計算方式</h3>
+    <p>停掉 osd.0 後看到 <code>4/21 objects degraded (19.048%)</code>，
+    一開始不知道 21 是怎麼來的，後來理解了：</p>
+    <ul>
+      <li>sblab 目前有 7 個 object</li>
+      <li>每個 object 有 3 份副本</li>
+      <li>所以副本總數 = 7 × 3 = 21</li>
+      <li>osd.0 掛掉後，有 4 個副本暫時遺失</li>
+      <li>4 / 21 ≈ 19.048%</li>
+    </ul>
+    <p>這個數字不代表資料遺失，只是少了一份備份。真正危險的門檻是副本數低於
+    <code>min_size=2</code>，也就是同時有兩個 host 掛掉才會停止服務。</p>
+
+    <h3>關於 degraded 百分比的門檻</h3>
+    <p>我自己推導：超過 33.3%（約 1/3）通常代表已經有超過 1 個 OSD 出問題，
+    風險大幅上升。但 Ceph 實際上不是用百分比來判斷，而是追蹤每個 PG 的副本數
+    是否低於 <code>min_size</code>，百分比只是給人看的參考數字。</p>
+
+    <h3>PGP 與 CRUSH 的關係</h3>
+    <p>PGP 是 CRUSH 計算系統的輸入參數——CRUSH 不知道你有幾個 PG，
+    是 PGP 告訴它的。所以 PGP 可以說是「觸發 CRUSH 重新計算的開關」。</p>
+    <ul>
+      <li><strong>pg_num</strong>：決定有幾個貨櫃（編號規劃）</li>
+      <li><strong>pgp_num</strong>：告訴 CRUSH 有幾個貨櫃需要計算對應的 OSD（實際派送執行）</li>
+      <li>兩者通常設成相同值，代表規劃與執行同步</li>
+      <li>只調 pg_num 不調 pgp_num → 資料不會真的搬移</li>
+    </ul>
+
+    <h3>破壞性測試觀察到的 PG 狀態</h3>
+    <p>停掉 osd.0 後，PG 出現了兩種新狀態：</p>
+    <ul>
+      <li><code>active+undersized</code>：副本數不足（3→2），但 PG 裡面沒有 object，
+      所以只顯示 undersized，不顯示 degraded</li>
+      <li><code>active+undersized+degraded</code>：副本數不足，而且 PG 裡面有 object
+      受到影響，同時顯示兩個狀態</li>
+    </ul>
+    <p>這讓我理解到：undersized 是 PG 結構的問題，degraded 是 PG 裡面資料的問題，
+    有資料的 PG 才會同時出現兩個。</p>
+  </div>
+
+  <!-- 之後的日誌記錄加在這裡，格式如下：
+  <div class="journal-entry">
+    <p class="date">YYYY-MM-DD</p>
+    <h3>標題</h3>
+    <p>內容...</p>
+  </div>
+  -->
+
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>
