@@ -6,31 +6,201 @@
 <title>個人筆記 | Ceph 學習紀錄</title>
 <link rel="stylesheet" href="style.css">
 <style>
+/* ===== Editor area ===== */
+.note-editor {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.note-editor .editor-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.note-editor .editor-date {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.note-editor input[type="text"] {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.note-editor textarea {
+  width: 100%;
+  min-height: 160px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: "SF Mono", Consolas, monospace;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.6;
+}
+
+.note-editor textarea:focus,
+.note-editor input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 0.75rem;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary:hover { opacity: 0.88; }
+
+.btn-secondary {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover { background: var(--bg-secondary); }
+
+.btn-danger {
+  background: transparent;
+  color: #c0392b;
+  border: 1px solid #c0392b;
+}
+
+.btn-danger:hover { background: #fdf0ef; }
+
+/* ===== Journal entries ===== */
 .journal-entry {
   border-left: 3px solid var(--accent);
   padding: 0 0 0 1.25rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
-.journal-entry .date {
+
+.entry-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.entry-date {
   font-size: 13px;
   color: var(--text-secondary);
-  margin: 0 0 0.5rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
 }
-.journal-entry h3 {
-  margin: 0 0 0.75rem;
+
+.entry-title {
   font-size: 16px;
-}
-.journal-entry p {
+  font-weight: 600;
   margin: 0 0 0.75rem;
 }
-.journal-entry ul {
-  margin: 0 0 0.75rem;
-  padding-left: 1.25rem;
+
+.entry-actions {
+  display: flex;
+  gap: 6px;
 }
-.journal-entry li {
-  margin-bottom: 4px;
+
+.entry-actions button {
+  padding: 3px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.entry-actions button:hover { color: var(--text); }
+.entry-actions .del-btn:hover { color: #c0392b; border-color: #c0392b; }
+
+/* ===== Rendered Markdown ===== */
+.entry-body h1, .entry-body h2, .entry-body h3 {
+  margin: 1rem 0 0.5rem;
+}
+.entry-body h1 { font-size: 18px; }
+.entry-body h2 { font-size: 16px; }
+.entry-body h3 { font-size: 14px; }
+.entry-body p { margin: 0 0 0.6rem; font-size: 15px; line-height: 1.7; }
+.entry-body ul, .entry-body ol { padding-left: 1.25rem; margin: 0 0 0.6rem; }
+.entry-body li { font-size: 15px; line-height: 1.7; margin-bottom: 2px; }
+.entry-body code {
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: "SF Mono", Consolas, monospace;
+}
+.entry-body pre {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 0 0 0.6rem;
+}
+.entry-body pre code { background: none; padding: 0; }
+.entry-body blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  margin: 0 0 0.6rem;
+}
+.entry-body strong { font-weight: 600; }
+.entry-body em { font-style: italic; }
+.entry-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 0.5rem 0 0.75rem;
+}
+.entry-body th, .entry-body td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.entry-body th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.empty-state {
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+  padding: 2rem 0;
 }
 </style>
 </head>
@@ -57,77 +227,198 @@
 
 <main>
   <h1>個人筆記</h1>
-  <p class="lead">隨手記下學習過程中自己的想法、比喻、疑問與頓悟，不拘格式，按日期排列。</p>
+  <p class="lead">隨手記下學習過程中的想法、比喻與疑問，支援 Markdown 格式，儲存在這個瀏覽器中。</p>
 
-  <!-- ===== 2026-06-15 ===== -->
-  <div class="journal-entry">
-    <p class="date">2026-06-15</p>
+  <!-- 新增筆記區 -->
+  <div class="note-editor" id="editor-area">
+    <div class="editor-header">
+      <span class="editor-date" id="editor-date"></span>
+      <input type="text" id="note-title" placeholder="標題（選填）">
+    </div>
+    <textarea id="note-content" placeholder="支援 Markdown 格式，例如：
+## 標題
+**粗體**、*斜體*、`程式碼`
 
-    <h3>用貨運比喻理解 PG、物件、OSD 的關係</h3>
-    <p>今天透過破壞性測試（停掉 osd.0）才真正搞懂 PG 和 object 的差別。
-    之前一直以為 PG 就是資料本身，其實 PG 只是「容器」，資料（object）才是真正放在裡面的東西。</p>
+- 清單項目
+- 清單項目
 
-    <p>我自己想到的比喻：</p>
-    <table>
-      <tr><th>Ceph 概念</th><th>貨運比喻</th></tr>
-      <tr><td>PG</td><td>貨櫃（容器，不是貨物本身）</td></tr>
-      <tr><td>物件（object）</td><td>貨櫃裡的貨物（實際資料）</td></tr>
-      <tr><td>副本（replica）</td><td>貨櫃複製幾份放在不同倉庫</td></tr>
-      <tr><td>OSD</td><td>倉庫</td></tr>
-      <tr><td>host</td><td>倉庫所在的建築物</td></tr>
-      <tr><td>CRUSH</td><td>貨運排程系統，決定貨櫃送到哪些倉庫</td></tr>
-    </table>
-
-    <h3>19.048% degraded 的計算方式</h3>
-    <p>停掉 osd.0 後看到 <code>4/21 objects degraded (19.048%)</code>，
-    一開始不知道 21 是怎麼來的，後來理解了：</p>
-    <ul>
-      <li>sblab 目前有 7 個 object</li>
-      <li>每個 object 有 3 份副本</li>
-      <li>所以副本總數 = 7 × 3 = 21</li>
-      <li>osd.0 掛掉後，有 4 個副本暫時遺失</li>
-      <li>4 / 21 ≈ 19.048%</li>
-    </ul>
-    <p>這個數字不代表資料遺失，只是少了一份備份。真正危險的門檻是副本數低於
-    <code>min_size=2</code>，也就是同時有兩個 host 掛掉才會停止服務。</p>
-
-    <h3>關於 degraded 百分比的門檻</h3>
-    <p>我自己推導：超過 33.3%（約 1/3）通常代表已經有超過 1 個 OSD 出問題，
-    風險大幅上升。但 Ceph 實際上不是用百分比來判斷，而是追蹤每個 PG 的副本數
-    是否低於 <code>min_size</code>，百分比只是給人看的參考數字。</p>
-
-    <h3>PGP 與 CRUSH 的關係</h3>
-    <p>PGP 是 CRUSH 計算系統的輸入參數——CRUSH 不知道你有幾個 PG，
-    是 PGP 告訴它的。所以 PGP 可以說是「觸發 CRUSH 重新計算的開關」。</p>
-    <ul>
-      <li><strong>pg_num</strong>：決定有幾個貨櫃（編號規劃）</li>
-      <li><strong>pgp_num</strong>：告訴 CRUSH 有幾個貨櫃需要計算對應的 OSD（實際派送執行）</li>
-      <li>兩者通常設成相同值，代表規劃與執行同步</li>
-      <li>只調 pg_num 不調 pgp_num → 資料不會真的搬移</li>
-    </ul>
-
-    <h3>破壞性測試觀察到的 PG 狀態</h3>
-    <p>停掉 osd.0 後，PG 出現了兩種新狀態：</p>
-    <ul>
-      <li><code>active+undersized</code>：副本數不足（3→2），但 PG 裡面沒有 object，
-      所以只顯示 undersized，不顯示 degraded</li>
-      <li><code>active+undersized+degraded</code>：副本數不足，而且 PG 裡面有 object
-      受到影響，同時顯示兩個狀態</li>
-    </ul>
-    <p>這讓我理解到：undersized 是 PG 結構的問題，degraded 是 PG 裡面資料的問題，
-    有資料的 PG 才會同時出現兩個。</p>
+```bash
+ceph -s
+```"></textarea>
+    <div class="editor-actions">
+      <button class="btn btn-secondary" id="cancel-btn" style="display:none">取消編輯</button>
+      <button class="btn btn-primary" id="save-btn">儲存筆記</button>
+    </div>
   </div>
 
-  <!-- 之後的日誌記錄加在這裡，格式如下：
-  <div class="journal-entry">
-    <p class="date">YYYY-MM-DD</p>
-    <h3>標題</h3>
-    <p>內容...</p>
-  </div>
-  -->
-
+  <!-- 筆記列表 -->
+  <div id="notes-list"></div>
 </main>
 
-<script src="script.js"></script>
+<script>
+// ===== 簡易 Markdown 解析器 =====
+function parseMarkdown(text) {
+  let html = text
+    // 跳脫 HTML
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // 程式碼區塊
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code>${code.trim()}</code></pre>`)
+    // 行內程式碼
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // 標題
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // 粗體 / 斜體
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // 引言
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    // 無序清單（連續的 - 行）
+    .replace(/(^- .+$(\n^- .+$)*)/gm, match => {
+      const items = match.split('\n').map(l => `<li>${l.replace(/^- /, '')}</li>`).join('');
+      return `<ul>${items}</ul>`;
+    })
+    // 有序清單
+    .replace(/(^\d+\. .+$(\n^\d+\. .+$)*)/gm, match => {
+      const items = match.split('\n').map(l => `<li>${l.replace(/^\d+\. /, '')}</li>`).join('');
+      return `<ol>${items}</ol>`;
+    })
+    // 段落（空行分隔）
+    .replace(/\n\n+/g, '\n\n')
+    .split('\n\n')
+    .map(block => {
+      if (/^<(h[1-3]|ul|ol|pre|blockquote)/.test(block.trim())) return block;
+      return `<p>${block.replace(/\n/g, '<br>')}</p>`;
+    })
+    .join('\n');
+  return html;
+}
+
+// ===== localStorage =====
+const STORAGE_KEY = 'ceph-my-notes';
+
+function loadNotes() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  } catch { return []; }
+}
+
+function saveNotes(notes) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes));
+}
+
+// ===== UI =====
+const notesList = document.getElementById('notes-list');
+const noteTitle = document.getElementById('note-title');
+const noteContent = document.getElementById('note-content');
+const saveBtn = document.getElementById('save-btn');
+const cancelBtn = document.getElementById('cancel-btn');
+const editorDate = document.getElementById('editor-date');
+
+let editingId = null;
+
+function todayStr() {
+  return new Date().toLocaleDateString('zh-TW', {
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).replace(/\//g, '-');
+}
+
+function updateEditorDate() {
+  editorDate.textContent = editingId
+    ? '編輯中'
+    : todayStr();
+}
+
+updateEditorDate();
+
+function renderNotes() {
+  const notes = loadNotes();
+  if (notes.length === 0) {
+    notesList.innerHTML = '<p class="empty-state">還沒有筆記，在上方輸入你的第一篇吧。</p>';
+    return;
+  }
+
+  notesList.innerHTML = notes.slice().reverse().map(note => `
+    <div class="journal-entry" id="entry-${note.id}">
+      <div class="entry-header">
+        <span class="entry-date">${note.date}</span>
+        <div class="entry-actions">
+          <button onclick="editNote('${note.id}')">編輯</button>
+          <button class="del-btn" onclick="deleteNote('${note.id}')">刪除</button>
+        </div>
+      </div>
+      ${note.title ? `<div class="entry-title">${note.title}</div>` : ''}
+      <div class="entry-body">${parseMarkdown(note.content)}</div>
+    </div>
+  `).join('');
+}
+
+saveBtn.addEventListener('click', () => {
+  const content = noteContent.value.trim();
+  if (!content) return;
+
+  const notes = loadNotes();
+
+  if (editingId) {
+    const idx = notes.findIndex(n => n.id === editingId);
+    if (idx !== -1) {
+      notes[idx].title = noteTitle.value.trim();
+      notes[idx].content = content;
+      notes[idx].updatedAt = new Date().toISOString();
+    }
+    editingId = null;
+    cancelBtn.style.display = 'none';
+    saveBtn.textContent = '儲存筆記';
+  } else {
+    notes.push({
+      id: Date.now().toString(),
+      date: todayStr(),
+      title: noteTitle.value.trim(),
+      content,
+      createdAt: new Date().toISOString()
+    });
+  }
+
+  saveNotes(notes);
+  noteTitle.value = '';
+  noteContent.value = '';
+  updateEditorDate();
+  renderNotes();
+});
+
+function editNote(id) {
+  const notes = loadNotes();
+  const note = notes.find(n => n.id === id);
+  if (!note) return;
+
+  editingId = id;
+  noteTitle.value = note.title || '';
+  noteContent.value = note.content;
+  saveBtn.textContent = '更新筆記';
+  cancelBtn.style.display = 'inline-block';
+  updateEditorDate();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+cancelBtn.addEventListener('click', () => {
+  editingId = null;
+  noteTitle.value = '';
+  noteContent.value = '';
+  saveBtn.textContent = '儲存筆記';
+  cancelBtn.style.display = 'none';
+  updateEditorDate();
+});
+
+function deleteNote(id) {
+  if (!confirm('確定要刪除這篇筆記嗎？')) return;
+  const notes = loadNotes().filter(n => n.id !== id);
+  saveNotes(notes);
+  renderNotes();
+}
+
+renderNotes();
+</script>
 </body>
 </html>
